@@ -73,6 +73,20 @@ void halfCycle(int time){
     runTime(time);
 }
 
+    
+void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl){
+    scanf("How many Cycles to you want to work? %d");
+        numCycl = getArgAt(argv, 1);    
+    if(numCycl > 1){
+        scanf("Please provide a break time for in between cycles ");
+        brkTimeCycl = getArgAt(argv, 4);
+    }
+    scanf("How long should be the work time? ");
+        workTime = getArgAt(argv, 2);    
+    scanf("And the break time? ");
+        breakTime = getArgAt(argv, 3);    
+}
+
 void playSound(char sound){
     switch(sound){
         case START: puts("Start Sound");
