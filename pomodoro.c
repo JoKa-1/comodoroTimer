@@ -14,7 +14,7 @@ static void runTime(int time);
 static void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl);
 static void askbrkTimeCycl(int *btm, int *args);
 
-int main(int argc, char **argv){
+int main(void){
     
     int numCycl = 0;
     int workTime = 0;
@@ -31,7 +31,7 @@ int main(int argc, char **argv){
         halfCycle(breakTime);
 
         if(numCycl > 1){
-            puts("Big break %d min\n", brkTimeCycl);
+            printf("Big break %d min\n", brkTimeCycl);
             halfCycle(brkTimeCycl);
         }
     }
