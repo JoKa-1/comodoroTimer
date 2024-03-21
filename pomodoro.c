@@ -8,47 +8,83 @@ enum{
     WARN = 'w',
 };
 
-//void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl);
-int getArgAt(char **args, int IndxArg);
-void playSound(char sound);
-void halfCycle(int time);
-void runTime(int time);
+static void playSound(char sound);
+static void halfCycle(int time);
+static void runTime(int time);
+static void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl);
+static void askbrkTimeCycl(int *btm, int *args);
 
 int main(int argc, char **argv){
     
-    /*
-    goal is provide [0]number_of_cycles [1]worktime [2]breaktime [3]break_between_cycles 
-    */ 
     int numCycl = 0;
     int workTime = 0;
     int breakTime = 0;
     int brkTimeCycl = 0;
-    
-    if(argc == 4){
-        numCycl = getArgAt(argv, 1);    
-        workTime = getArgAt(argv, 2);    
-        breakTime = getArgAt(argv, 3);    
-    }
-    else if(argc == 5){
-        brkTimeCycl = getArgAt(argv, 4);
-    }
-    else{
-        return 1;
-    }
 
+    menu(&numCycl, &workTime, &breakTime, &brkTimeCycl); 
+    
     for(int i=0; i<numCycl; i++){
-        puts("Start work Time");
+        printf("Start worktime %d min\n", workTime);
         halfCycle(workTime);
-        puts("Start break Time");
+
+        printf("Start breaktime %d min\n", breakTime);
         halfCycle(breakTime);
 
         if(numCycl > 1){
-            puts("Big break");
+            puts("Big break %d min\n", brkTimeCycl);
             halfCycle(brkTimeCycl);
         }
     }
+    playSound('e');
 
     return 0;
+}
+
+static void runTime(int time){
+    sleep(60*(time-1));
+    playSound('w');
+    sleep(60);
+}
+
+static void halfCycle(int time){
+    playSound('s');
+    runTime(time);
+}
+
+static void askbrkTimeCycl(int *btm, int *args){
+    printf("Please provide a break time for in between cycles ");
+    scanf("%d\n", args);
+    *btm = *args;
+}
+
+static void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl){
+    int args = 0;
+    printf("How many Cycles to you want to work?\n");
+    scanf("%d\n", &args);
+        *numCycl = args;    
+    if(*numCycl > 1){
+        askbrkTimeCycl(brkTimeCycl, &args);
+    }
+    printf("How long should be the work time? ");
+    scanf("%d\n", &args);
+        *wTime = args;    
+    printf("And the break time? ");
+    scanf("%d\n\n", &args);
+        *bTime = args;    
+
+}
+
+static void playSound(char sound){
+    switch(sound){
+        case START: puts("Start Sound");
+                    break;
+        case WARN: puts("Warn Sound\n");
+                   break;
+        case END: puts("End Sound");
+                  break;
+        default : puts("No Sound");
+                  break;
+    }
 }
 
 int getArgAt(char **args, int IndxArg){
@@ -62,40 +98,3 @@ int getArgAt(char **args, int IndxArg){
     return arg;
 }
 
-void runTime(int time){
-    sleep(60*(time-1));
-    playSound('w');
-    sleep(60);
-}
-
-void halfCycle(int time){
-    playSound('s');
-    runTime(time);
-}
-
-    
-void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl){
-    scanf("How many Cycles to you want to work? %d");
-        numCycl = getArgAt(argv, 1);    
-    if(numCycl > 1){
-        scanf("Please provide a break time for in between cycles ");
-        brkTimeCycl = getArgAt(argv, 4);
-    }
-    scanf("How long should be the work time? ");
-        workTime = getArgAt(argv, 2);    
-    scanf("And the break time? ");
-        breakTime = getArgAt(argv, 3);    
-}
-
-void playSound(char sound){
-    switch(sound){
-        case START: puts("Start Sound");
-                    break;
-        case WARN: puts("Warn Sound");
-                   break;
-        case END: puts("End Sound");
-                  break;
-        default : puts("No Sound");
-                  break;
-    }
-}
