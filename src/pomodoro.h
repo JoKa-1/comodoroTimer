@@ -9,7 +9,6 @@ enum{
 };
 
 static void menu(int *numCycl, int *wTime, int *bTime, int *brkTimeCycl);
-static void askbrkTimeCycl(int *btm, int *args);
 static void playSound(char sound);
 static void halfCycle(int time);
 static void runTime(int time);
