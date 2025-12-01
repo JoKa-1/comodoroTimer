@@ -1,35 +1,41 @@
 
-CC = gcc
-CFLAGS= -g -O0 -std=c99 -Wall -Wextra -pedantic $(includes) -lm 
+CC = clang
+
+# Compilation flags
+CFLAGS = -g -O0 -std=c99 -Wall -Wextra -pedantic -I/opt/homebrew/include -Wc23-extensions
+
+# Linker flags
+LDFLAGS = -L/opt/homebrew/lib -lraylib -lm \
+          -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
+
 SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
 
-# List all source files
+# Source and object files
 SRCS = $(wildcard $(SRC_DIR)/*.c)
-
-# Generate corresponding object file names
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
 
-# Name of the final executable
+# Final executable
 EXEC = $(BIN_DIR)/pomodoro
 
-# Compile and link the executable
+# Link the executable
 $(EXEC): $(OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(OBJS) -o $@
+	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
-# Compile source files into object files
+# Compile source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Create directories if they don't exist
+# Create directories if missing
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
-# Clean up
+
+# Clean command
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
