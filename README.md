@@ -1,9 +1,16 @@
 # comodoroTimer
 A simple Pomodoro Timer in C.
 
-Currently it is only for a terminal, the goal is to add sound and a GUI.
-You should be able to give a work and break time and also how often this cycle should be repeated.
+Currently it isn't fully functional.
 
-It is used like: ./pomodoro 
+What it has:
+- clean GUI build with clay
+- starts a timer at 45 min
+- stop timer and restart at 45min
 
+What is missing
+- break timer
+- cycles
+- sounds
+- halting timer and resuming
  
