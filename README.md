@@ -13,4 +13,5 @@ What is missing
 - cycles
 - sounds
 - halting timer and resuming
+- nice modularity
  
