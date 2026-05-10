@@ -1,19 +1,20 @@
-#include <stdbool.h>
 #define CLAY_IMPLEMENTATION
-#include "../clay.h"
-#include "../raylib/clay_renderer_raylib.c"
-#include "pomodoro.h"
+#include "timerLogic.h"
+#include "layout.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> // for strlen, snprintf
+#include "../raylib/clay_renderer_raylib.c"
 
-void HandleClayErrors(Clay_ErrorData errorData);
-Clay_RenderCommandArray CreateLayout(void);
-void RedrawFrame(Font *fonts);
+#define RESOURCES_DIR "resources/"
 
-/* Prototypes from other translation units: use proper prototype form */
-double getCurrentTime(void);
+// Centralized error handler matching API
+typedef enum { Layout_OK = 0 } LayoutStatus; // For future use
+
+void layout_handle_errors(Clay_ErrorData errorData);
+Clay_RenderCommandArray CreateLayout(PomodoroTimerState *timer, Clay_String *timerString, Clay_String *workTimeString, Clay_String *breakTimeString, Clay_String *cycleString, LayoutUIState *uiState);
+void HandleButtonInteraction(Clay_ElementId elementId, Clay_PointerData pointerInfo, void *userData);
 
 const uint32_t FONT_ID_BODY_24 = 0;
 const uint32_t FONT_ID_BODY_16 = 1;
@@ -25,101 +26,97 @@ const Clay_Color INACTIVEGREY = {124, 124, 124, 255};
 const Clay_Color BUTTONEGREY = {163, 163, 163, 255};
 const char *WINDOW_TITLE = "Pomodoro Timer";
 
-static char TIMERSTRING[12]; // "MM:SS"
-static double startTime = 0;
-static double timerDuration = 0;
-static double baseWorkTime = 45 * 60;
-static double baseBreakTime = 15 * 60;
-static bool initializeTimer = false;
-static bool timerIsRunning = false;
-
-Clay_String timerString = {.chars = "45:00",
-                           .length = (int32_t)strlen("45:00"),
-                           .isStaticallyAllocated = true};
-Clay_String workTimeString = {.chars = "45:00",
-                              .length = (int32_t)strlen("45:00"),
-                              .isStaticallyAllocated = true};
-Clay_String breakTimeString = {.chars = "15:00",
-                               .length = (int32_t)strlen("45:00"),
-                               .isStaticallyAllocated = true};
-Clay_String cycleString = {.chars = "3",
-                           .length = (int32_t)strlen("3"),
-                           .isStaticallyAllocated = true};
-
-// ButtonData
-bool TimerButtonPressed = false;
-
-// global bool for errorHandeling
+// UI App-State
 bool reinitializeClay = false;
 
 int main(void) {
-  // Clay data
-  Clay_Dimensions dimensions =
-      (Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()};
-  Clay_ErrorHandler errorHandler = (Clay_ErrorHandler){HandleClayErrors, 0};
-  uint64_t clayRequiredMemory = Clay_MinMemorySize();
-  Clay_Arena clayMemory = (Clay_Arena){
-      .memory = malloc(clayRequiredMemory),
-      .capacity = clayRequiredMemory,
-  };
+    // Local state
+    PomodoroTimerState timer;
+    PomodoroTimer_Init(&timer, 45 * 60, 15 * 60);
 
-  // has to be done before Font init
-  Clay_Raylib_Initialize(1024, 768, WINDOW_TITLE, FLAG_WINDOW_RESIZABLE);
-  Clay_Initialize(clayMemory, dimensions, errorHandler);
+    LayoutUIState uiState = { false, false };
 
-  // render data
-  Font fonts[2];
-  fonts[FONT_ID_BODY_24] =
-      LoadFontEx("resources/Roboto-Regular.ttf", 128, 0, 400);
-  SetTextureFilter(fonts[FONT_ID_BODY_24].texture, TEXTURE_FILTER_BILINEAR);
-  fonts[FONT_ID_BODY_16] =
-      LoadFontEx("resources/Roboto-Regular.ttf", 32, 0, 400);
-  SetTextureFilter(fonts[FONT_ID_BODY_16].texture, TEXTURE_FILTER_BILINEAR);
-  Clay_SetMeasureTextFunction(Raylib_MeasureText, fonts);
+    Clay_String timerString = {.chars = "45:00",
+                               .length = (int32_t)strlen("45:00"),
+                               .isStaticallyAllocated = true};
+    Clay_String workTimeString = {.chars = "45:00",
+                                  .length = (int32_t)strlen("45:00"),
+                                  .isStaticallyAllocated = true};
+    Clay_String breakTimeString = {.chars = "15:00",
+                                   .length = (int32_t)strlen("45:00"),
+                                   .isStaticallyAllocated = true};
+    Clay_String cycleString = {.chars = "3",
+                               .length = (int32_t)strlen("3"),
+                               .isStaticallyAllocated = true};
 
-  setWindowSizeBound();
+    // Clay data
+    Clay_Dimensions dimensions =
+        (Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()};
+    Clay_ErrorHandler errorHandler = (Clay_ErrorHandler){layout_handle_errors, 0};
+    uint64_t clayRequiredMemory = Clay_MinMemorySize();
+    Clay_Arena clayMemory = (Clay_Arena){
+        .memory = malloc(clayRequiredMemory),
+        .capacity = clayRequiredMemory,
+    };
 
-  // render loop
-  while (!WindowShouldClose()) // Detect window close button or ESC key
-  {
-    if (reinitializeClay) {
-      Clay_SetMaxElementCount(8192);
-      clayRequiredMemory = Clay_MinMemorySize();
-      clayMemory = Clay_CreateArenaWithCapacityAndMemory(
-          clayRequiredMemory, malloc(clayRequiredMemory));
-      Clay_Initialize(
-          clayMemory,
-          (Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()},
-          (Clay_ErrorHandler){HandleClayErrors, 0});
-      reinitializeClay = false;
+    // has to be done before Font init
+    Clay_Raylib_Initialize(1024, 768, WINDOW_TITLE, FLAG_WINDOW_RESIZABLE);
+    Clay_Initialize(clayMemory, dimensions, errorHandler);
+
+    // render data
+    Font fonts[2];
+    char fontPath1[256];
+    char fontPath2[256];
+    snprintf(fontPath1, sizeof(fontPath1), "%sRoboto-Regular.ttf", RESOURCES_DIR);
+    snprintf(fontPath2, sizeof(fontPath2), "%sRoboto-Regular.ttf", RESOURCES_DIR);
+    fonts[FONT_ID_BODY_24] = LoadFontEx(fontPath1, 128, 0, 400);
+    SetTextureFilter(fonts[FONT_ID_BODY_24].texture, TEXTURE_FILTER_BILINEAR);
+    fonts[FONT_ID_BODY_16] = LoadFontEx(fontPath2, 32, 0, 400);
+    SetTextureFilter(fonts[FONT_ID_BODY_16].texture, TEXTURE_FILTER_BILINEAR);
+    Clay_SetMeasureTextFunction(Raylib_MeasureText, fonts);
+
+    setWindowSizeBound();
+
+    // render loop
+    while (!WindowShouldClose()) // Detect window close button or ESC key
+    {
+        if (reinitializeClay) {
+            Clay_SetMaxElementCount(8192);
+            clayRequiredMemory = Clay_MinMemorySize();
+            clayMemory = Clay_CreateArenaWithCapacityAndMemory(
+                clayRequiredMemory, malloc(clayRequiredMemory));
+            Clay_Initialize(
+                clayMemory,
+                (Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()},
+                (Clay_ErrorHandler){layout_handle_errors, 0});
+            reinitializeClay = false;
+        }
+        layout_redraw_frame(fonts, &timer, &timerString, &workTimeString, &breakTimeString, &cycleString, &uiState);
     }
-    RedrawFrame(fonts);
-  }
 
-  Clay_Raylib_Close();
-  return 0;
+    Clay_Raylib_Close();
+    return 0;
 }
 
-void setWindowSizeBound(){
-  SetWindowMaxSize((int)(GetMonitorWidth(0)/2), GetMonitorHeight(0)); // FLAG_WINDOW_RESIZABLE
-  SetWindowMinSize(401, 410); // FLAG_WINDOW_RESIZABLE
-
+void setWindowSizeBound(void) {
+  SetWindowMaxSize((int)(GetMonitorWidth(0) / 2),
+                   GetMonitorHeight(0)); // FLAG_WINDOW_RESIZABLE
+  SetWindowMinSize(401, 410);            // FLAG_WINDOW_RESIZABLE
 }
 
-void HandleClayErrors(Clay_ErrorData errorData) {
-  printf("%s", errorData.errorText.chars);
-  if (errorData.errorType == CLAY_ERROR_TYPE_ELEMENTS_CAPACITY_EXCEEDED) {
-    reinitializeClay = true;
-    Clay_SetMaxElementCount(Clay_GetMaxElementCount() * 2);
-  } else if (errorData.errorType ==
-             CLAY_ERROR_TYPE_TEXT_MEASUREMENT_CAPACITY_EXCEEDED) {
-    reinitializeClay = true;
-    Clay_SetMaxMeasureTextCacheWordCount(
-        Clay_GetMaxMeasureTextCacheWordCount() * 2);
-  }
+void layout_handle_errors(Clay_ErrorData errorData) {
+    printf("%s", errorData.errorText.chars);
+    if (errorData.errorType == CLAY_ERROR_TYPE_ELEMENTS_CAPACITY_EXCEEDED) {
+        reinitializeClay = true;
+        Clay_SetMaxElementCount(Clay_GetMaxElementCount() * 2);
+    } else if (errorData.errorType == CLAY_ERROR_TYPE_TEXT_MEASUREMENT_CAPACITY_EXCEEDED) {
+        reinitializeClay = true;
+        Clay_SetMaxMeasureTextCacheWordCount(Clay_GetMaxMeasureTextCacheWordCount() * 2);
+    }
 }
 
-void RedrawFrame(Font *fonts) {
+
+void layout_redraw_frame(Font *fonts, PomodoroTimerState *timer, Clay_String *timerString, Clay_String *workTimeString, Clay_String *breakTimeString, Clay_String *cycleString, LayoutUIState *uiState) {
 
   static Clay_Vector2 lastPointer = {-1, -1};
   Vector2 mp = GetMousePosition();
@@ -132,15 +129,17 @@ void RedrawFrame(Font *fonts) {
     Clay_SetPointerState(lastPointer, false);
   }
   // printf("Mouse: x: %f | y: %f\n", mp.x, mp.y);
-  printf("Width: %d | Height: %d\n", GetScreenWidth(), GetScreenHeight());
+  // printf("Width: %d | Height: %d\n", GetScreenWidth(), GetScreenHeight());
 
-  Clay_SetLayoutDimensions((Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()});
-  Clay_RenderCommandArray renderCommands = CreateLayout();
+  Clay_SetLayoutDimensions(
+      (Clay_Dimensions){(float)GetScreenWidth(), (float)GetScreenHeight()});
+  Clay_RenderCommandArray renderCommands = CreateLayout(timer, timerString, workTimeString, breakTimeString, cycleString, uiState);
   BeginDrawing();
   ClearBackground(BLACK);
   Clay_Raylib_Render(renderCommands, fonts);
   EndDrawing();
 }
+
 
 void HandleButtonInteraction(Clay_ElementId elementId,
                              Clay_PointerData pointerInfo, void *userData) {
@@ -151,50 +150,7 @@ void HandleButtonInteraction(Clay_ElementId elementId,
   }
 }
 
-void startTimer(double durationInSeconds, bool *refreshTimer) {
-  startTime = getCurrentTime();
-  timerDuration = durationInSeconds;
-  *refreshTimer = true;
-  initializeTimer = true;
-}
-
-void stopTimer(bool *refreshTimer) {
-  *refreshTimer = false;
-  initializeTimer = false;
-
-  snprintf(TIMERSTRING, sizeof(TIMERSTRING), "45:00");
-  timerString.chars = TIMERSTRING;
-  timerString.length = (int32_t)strlen(TIMERSTRING);
-}
-
-void runTimer() {
-
-  if (timerIsRunning) {
-    double elapsed = getCurrentTime() - startTime;
-    double remaining = timerDuration - elapsed;
-
-    int minutes = (int)(remaining / 60);
-    int seconds = (int)(remaining) % 60;
-    // Check if timer has finished
-    if (minutes == 0 && seconds == 0) {
-      remaining = 0;
-      timerIsRunning = false;
-    }
-    snprintf(TIMERSTRING, sizeof(TIMERSTRING), "%02d:%02d", minutes, seconds);
-    timerString.chars = TIMERSTRING;
-    timerString.length = (int32_t)strlen(TIMERSTRING);
-    timerString.isStaticallyAllocated = false;
-  }
-}
-
-void setTimer(Clay_String *timerString, int min, int sec) {
-  snprintf(TIMERSTRING, sizeof(TIMERSTRING), "%02d:%02d", min, sec);
-  timerString->chars = TIMERSTRING;
-  timerString->length = (int32_t)strlen(TIMERSTRING);
-  timerString->isStaticallyAllocated = false;
-}
-
-Clay_RenderCommandArray CreateLayout(void) {
+Clay_RenderCommandArray CreateLayout(PomodoroTimerState *timer, Clay_String *timerString, Clay_String *workTimeString, Clay_String *breakTimeString, Clay_String *cycleString, LayoutUIState *uiState) {
   /*TODO: fetch windowsize and set some breakpoints to change fontsize
         - breakpoints in Vue
           small	    sm    400px > < 750px
@@ -202,7 +158,7 @@ Clay_RenderCommandArray CreateLayout(void) {
   */
 
   // init Functions
-  runTimer();
+  PomodoroTimer_run(timer, workTimeString);
   Clay_BeginLayout();
 
   CLAY(CLAY_ID("Background"), {.layout =
@@ -261,11 +217,11 @@ Clay_RenderCommandArray CreateLayout(void) {
           CLAY_TEXT(label, CLAY_TEXT_CONFIG(
                                {.fontId = FONT_ID_BODY_24,
                                 .fontSize = 16,
-                                .textColor = timerIsRunning ? ACTIVEGREEN
+                                .textColor = PomodoroTimer_isRunning(timer) ? ACTIVEGREEN
                                                             : EGGSHELLWHITE}));
         }
 
-        CLAY_TEXT(workTimeString,
+        CLAY_TEXT(*workTimeString,
                   CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_24,
                                     .fontSize = 48,
                                     .textColor = EGGSHELLWHITE}));
@@ -303,14 +259,15 @@ Clay_RenderCommandArray CreateLayout(void) {
           Clay_String label = {.chars = "Break",
                                .length = (int32_t)strlen("Break"),
                                .isStaticallyAllocated = true};
-          CLAY_TEXT(label, CLAY_TEXT_CONFIG(
-                               {.fontId = FONT_ID_BODY_24,
-                                .fontSize = 16,
-                                .textColor = timerIsRunning ? ACTIVEGREEN
-                                                            : EGGSHELLWHITE}));
+          CLAY_TEXT(label,
+                    CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_24,
+                                      .fontSize = 16,
+                                      .textColor = PomodoroTimer_isRunning(timer)
+                                                       ? ACTIVEGREEN
+                                                       : EGGSHELLWHITE}));
         }
 
-        CLAY_TEXT(breakTimeString,
+        CLAY_TEXT(*breakTimeString,
                   CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_24,
                                     .fontSize = 48,
                                     .textColor = EGGSHELLWHITE}));
@@ -346,13 +303,13 @@ Clay_RenderCommandArray CreateLayout(void) {
           CLAY_TEXT(label, CLAY_TEXT_CONFIG(
                                {.fontId = FONT_ID_BODY_24,
                                 .fontSize = 16,
-                                .textColor = timerIsRunning ? ACTIVEGREEN
+                                .textColor = PomodoroTimer_isRunning(timer) ? ACTIVEGREEN
                                                             : EGGSHELLWHITE}));
         }
 
-        CLAY_TEXT(cycleString, CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_24,
-                                                 .fontSize = 48,
-                                                 .textColor = EGGSHELLWHITE}));
+        CLAY_TEXT(*cycleString, CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_24,
+                                                  .fontSize = 48,
+                                                  .textColor = EGGSHELLWHITE}));
       }
     }
 
@@ -377,8 +334,8 @@ Clay_RenderCommandArray CreateLayout(void) {
 
            }) {
         // display the timer string
-        CLAY_TEXT(timerString, CLAY_TEXT_CONFIG({.fontSize = 128,
-                                                 .textColor = EGGSHELLWHITE}));
+        CLAY_TEXT(*timerString, CLAY_TEXT_CONFIG({.fontSize = 128,
+                                                  .textColor = EGGSHELLWHITE}));
       }
     }
 
@@ -405,22 +362,37 @@ Clay_RenderCommandArray CreateLayout(void) {
                                              .y = CLAY_ALIGN_Y_CENTER}},
                .cornerRadius = {12, 12, 12, 12},
                .border = {.width = {1, 1, 1, 1, 0}, .color = EGGSHELLWHITE},
-           }) {
-        bool buttonHovered = Clay_Hovered();
-        Clay_OnHover(HandleButtonInteraction, &TimerButtonPressed);
+            }) {
+         Clay_OnHover(HandleButtonInteraction, &uiState->timerButtonPressed);
 
-        CLAY_TEXT(timerIsRunning ? CLAY_STRING("Stop") : CLAY_STRING("Start"),
+        CLAY_TEXT(PomodoroTimer_isRunning(timer) ? CLAY_STRING("Stop") : CLAY_STRING("Start"),
                   CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_16,
                                     .fontSize = 24,
                                     .textColor = {255, 255, 255, 255}}));
+        
+        if (uiState->timerButtonPressed) {
+          PomodoroTimer_action(timer, &uiState->timerButtonPressed, *cycleString);
+        }
+      }
+      CLAY(CLAY_ID("ResetTimerButton"),
+           {
+               .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(0.15),
+                                     .height = CLAY_SIZING_PERCENT(0.2)},
+                          .padding = {20, 20, 20,
+                                      20}, //{left, right, top, bottom}
+                          .childAlignment = {.x = CLAY_ALIGN_X_CENTER,
+                                             .y = CLAY_ALIGN_Y_CENTER}},
+               .cornerRadius = {12, 12, 12, 12},
+               .border = {.width = {1, 1, 1, 1, 0}, .color = EGGSHELLWHITE},
+            }) {
+         Clay_OnHover(HandleButtonInteraction, &uiState->resetButtonPressed);
 
-        if (TimerButtonPressed) {
-          if (!initializeTimer) {
-            startTimer(baseWorkTime, &timerIsRunning);
-          } else {
-            stopTimer(&timerIsRunning);
-          }
-          TimerButtonPressed = false;
+        CLAY_TEXT(CLAY_STRING("Reset"),
+                  CLAY_TEXT_CONFIG({.fontId = FONT_ID_BODY_16,
+                                    .fontSize = 24,
+                                    .textColor = {255, 255, 255, 255}}));
+        if (uiState->resetButtonPressed) {
+          PomodoroTimer_action(timer, &uiState->resetButtonPressed, *cycleString);
         }
       }
     }
